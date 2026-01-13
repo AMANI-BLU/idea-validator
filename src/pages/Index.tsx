@@ -143,7 +143,7 @@ const Index = () => {
         {/* Footer */}
         <footer className="mt-20 text-center">
           <p className="text-muted-foreground text-sm">
-            Powered by AI • Built with Lovable
+            Powered by AI •  By Amanuel Solomon
           </p>
         </footer>
       </div>
