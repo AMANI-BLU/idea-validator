@@ -13,42 +13,6 @@ export interface ValidationResult {
     status: "yes" | "maybe" | "no";
     reason: string;
   };
-  isDemo?: boolean;
-}
-
-const STORAGE_KEY = "idea_validator_gemini_api_key";
-const DEMO_MODE_KEY = "idea_validator_demo_mode";
-
-export function getGeminiApiKey(): string {
-  if (typeof window === "undefined") return "";
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && stored.trim().length > 0) {
-    return stored.trim();
-  }
-  const envKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (envKey && typeof envKey === "string" && envKey.trim().length > 0) {
-    return envKey.trim();
-  }
-  return "";
-}
-
-export function setGeminiApiKey(key: string): void {
-  if (typeof window === "undefined") return;
-  if (!key || key.trim() === "") {
-    localStorage.removeItem(STORAGE_KEY);
-  } else {
-    localStorage.setItem(STORAGE_KEY, key.trim());
-  }
-}
-
-export function isDemoModeEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(DEMO_MODE_KEY) === "true";
-}
-
-export function setDemoModeEnabled(enabled: boolean): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(DEMO_MODE_KEY, enabled ? "true" : "false");
 }
 
 export async function validateIdea(idea: string): Promise<ValidationResult> {
@@ -57,15 +21,13 @@ export async function validateIdea(idea: string): Promise<ValidationResult> {
     throw new Error("Please provide a valid idea with at least 3 characters.");
   }
 
-  const apiKey = getGeminiApiKey();
-  const demoMode = isDemoModeEnabled();
+  const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || "").trim();
 
-  // If no API key is set or demo mode is explicitly enabled, return intelligent demo analysis
-  if (!apiKey || demoMode) {
+  // If no API key configured, use built-in smart simulation
+  if (!apiKey) {
     return generateDemoResult(trimmed);
   }
 
-  // Attempt Google Gemini call
   return await callGeminiAPI(trimmed, apiKey);
 }
 
@@ -143,13 +105,11 @@ If no similar products exist, products should be an empty array [].`;
           // ignore
         }
 
-        // If unauthorized or forbidden, don't retry other models, key is invalid
         if (response.status === 400 || response.status === 403) {
-          throw new Error(`Gemini API Error: ${message}. Please check your API key.`);
+          throw new Error(`AI Service Error: ${message}.`);
         }
 
-        // If 404 (model not found/deprecated) or 503 (temporarily busy), try next model
-        console.warn(`Gemini model ${model} failed with ${response.status}: ${message}. Trying fallback...`);
+        console.warn(`Model ${model} unavailable (${response.status}). Trying fallback...`);
         lastError = new Error(message);
         continue;
       }
@@ -158,7 +118,7 @@ If no similar products exist, products should be an empty array [].`;
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!rawText) {
-        throw new Error("No response received from Gemini.");
+        throw new Error("No response received from AI service.");
       }
 
       const cleaned = rawText
@@ -174,18 +134,17 @@ If no similar products exist, products should be an empty array [].`;
         opportunity: {
           status: parsed.opportunity?.status || "maybe",
           reason: parsed.opportunity?.reason || "Evaluation completed."
-        },
-        isDemo: false
+        }
       };
     } catch (err) {
-      if (err instanceof Error && err.message.includes("API key")) {
+      if (err instanceof Error && err.message.includes("AI Service Error")) {
         throw err;
       }
       lastError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
-  throw lastError || new Error("Failed to reach Gemini AI service. Please check your network and try again.");
+  throw lastError || new Error("Failed to reach AI service. Please check your network and try again.");
 }
 
 function generateDemoResult(idea: string): ValidationResult {
@@ -193,7 +152,6 @@ function generateDemoResult(idea: string): ValidationResult {
 
   if (lower.includes("pet") || lower.includes("dog") || lower.includes("cat")) {
     return {
-      isDemo: true,
       summary: "The pet tech and services market is established but experiencing steady innovation in subscription-based care and biometric monitoring.",
       opportunity: {
         status: "maybe",
@@ -227,7 +185,6 @@ function generateDemoResult(idea: string): ValidationResult {
 
   if (lower.includes("invoice") || lower.includes("freelanc") || lower.includes("finance") || lower.includes("tax")) {
     return {
-      isDemo: true,
       summary: "Freelance finance and automated invoicing is a competitive space dominated by established accounting suites and vertical neobanks.",
       opportunity: {
         status: "maybe",
@@ -259,9 +216,8 @@ function generateDemoResult(idea: string): ValidationResult {
     };
   }
 
-  // Default intelligent demo analysis
+  // Default simulated response
   return {
-    isDemo: true,
     summary: `The space surrounding "${idea.slice(0, 45)}..." features several active players addressing adjacent workflows, with emerging room for specialized AI workflow automation.`,
     opportunity: {
       status: "yes",
